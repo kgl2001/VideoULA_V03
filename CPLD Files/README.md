@@ -1,0 +1,101 @@
+# VideoULA V03 – CPLD firmware
+
+Firmware for the ATF1504AS-AU44 (V03 hardware). Current release: **V02/V03 Build 3**.
+
+Note: firmware build numbers are independent of hardware versions and revisions. The
+V01 firmware (Build 37) and the V02/V03 firmware (Build 3) use separate numbering.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `src/VideoULA.v` | Verilog source (common V02/V03 code) |
+| `VideoULA.qsf` | Quartus settings and pin assignments |
+| `VideoULA.qpf` | Quartus project file |
+| `VideoULA.sdc` | Timing constraints (auto-detected from the project root) |
+
+Keep this layout. The `.qsf` refers to `src/VideoULA.v` by relative path.
+
+## Toolchain
+
+The tools and commands below are for a **Windows** build environment.
+
+- Altera Quartus II 13.0 SP1 Web Edition:
+  https://www.altera.com/downloads/fpga-development-tools/quartus-ii-web-edition-design-software-version-13-0sp1-windows
+- Atmel POF2JED: https://www.microchip.com/en-us/development-tool/pof2jed
+- fuseconv (part of prjbureau): https://github.com/whitequark/prjbureau
+- OpenOCD (xPack): https://github.com/xpack-dev-tools/openocd-xpack/releases
+- Device: EPM7064STC44-10 (used as the closest match for the ATF1504AS; the
+  output is converted for the ATF1504AS in step 2 below)
+
+## Choosing the 16MHz or 48MHz build
+
+Near the top of `src/VideoULA.v`, enable exactly one of:
+
+    `define CLK_48MHZ
+    //`define CLK_16MHZ
+
+For the 16MHz build, swap the comment markers so `CLK_16MHZ` is active and
+`CLK_48MHZ` is commented out. Do not enable both.
+
+The 48MHz oscillator is optional in the 16MHz build. If it is not fitted,
+do not connect `CLK_6M` to the teletext IC.
+
+## Programming the ATF1504AS
+
+In the commands below, `<project>` is your Quartus project folder.
+
+### Step 1 – Create the .pof file in Quartus
+
+1. Install Quartus II 13.0 SP1 (link above) and open the project.
+2. The project uses the four files from the Files section above: `src\VideoULA.v`,
+   `VideoULA.qpf`, `VideoULA.qsf` and `VideoULA.sdc`. Open `VideoULA.qpf` in Quartus.
+3. Compile and check for errors.
+
+This creates `<project>\output_files\VideoULA.pof`.
+
+### Step 2 – Convert .pof to .jed with Atmel POF2JED
+
+1. Download and install Atmel POF2JED (link above).
+2. Input file: `<project>\output_files\VideoULA.pof`
+3. Device: `1504AS`
+4. Output file: `<project>\output_files\VideoULA.jed`
+
+### Step 3 – Convert .jed to .svf with fuseconv
+
+1. Install Python 3 and make sure it is on your PATH.
+2. Download the prjbureau tools (link above) and extract them (for example to
+   `C:\prjbureau-main`).
+3. Run:
+
+        cd C:\prjbureau-main
+        python -m util.fuseconv -d ATF1504AS <project>\output_files\VideoULA.jed <project>\output_files\VideoULA.svf
+
+This will likely fail with an error ending similar to:
+
+    util.jesd3.JESD3ParsingError: unrecognized field at line 795, column 2 (b'*\n\nNOTE  device '...)
+
+The POF2JED output has a stray line containing only `*`. Open the `.jed` file
+in a text editor, go to the line reported, and either delete the line that
+contains only `*` or put `NOTE` in front of the `*`. Save the file and run the
+command again.
+
+### Step 4 – Program the CPLD with OpenOCD
+
+1. Download OpenOCD for Windows (link above) and extract it
+   (for example to `C:\OpenOCD`).
+2. Run:
+
+        cd <project>\output_files
+        C:\OpenOCD\bin\openocd -d2 -f interface/altera-usb-blaster.cfg -c "adapter speed 400" -c "transport select jtag" -c "jtag newtap ATF1504AS tap -irlen 3 -expected-id 0x0150403f" -c "init" -c "svf VideoULA.svf" -c "sleep 200" -c "shutdown"
+
+A successful run ends with a message similar to
+`svf file programmed successfully for NNNN commands with 0 errors`.
+
+The CPLD needs the 12V programming voltage on its programming pin during
+programming. See the programmer board section in the main README.
+
+## Status
+
+V02/V03 Build 3 is tested on V03 hardware in both 16MHz and 48MHz modes.
+See the main README for the testing status table and known limitations.
