@@ -19,15 +19,16 @@ CLOCK CONFIGURATION - uncomment ONE define only
 
 `define CLK_16MHZ
   16MHz from BBC motherboard on CLK_16M pin (GCK) via Schmitt trigger.
-  CLK_6M held high-Z.
-  CLK_48M pin unused (oscillator not required).
+  CLK_6M is generated from CLK_48M, phase locked to CLK_1M, if the optional
+  48MHz oscillator is fitted. Without the oscillator, do not connect CLK_6M
+  to the teletext IC; the machine's own 6MHz is then used.
 ------------------------------------------------------------------------
 
 Clock architecture (unified clk_counter in both modes):
   A 4-bit clk_counter divides the effective 16MHz clock.
 
   48MHz mode: 2-bit prescaler divides CLK_48M by 3 → mhz16_clken
-  16MHz mode: mhz16_clken = 1 (every CLK_IN tick)
+  16MHz mode: mhz16_clken = 1 (every CLK_16M tick)
 
   CLK_8M   = clk_counter[0]  (direct bit tap)
   CLK_4M   = clk_counter[1]  (direct bit tap)
