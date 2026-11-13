@@ -2,6 +2,8 @@
 /************************************************************************
 VideoULA.v
 VideoULA V02/V03 - A replacement Video ULA for the BBC Micro
+Build 4 - November 2026 - Cursor alignment fix. Modes 0-6 cursor now uses
+                   cursor_invert0 (no delay); mode 7 cursor uses cursor_invert[1].
 Build 3 - August 2026 - 16MHz build: CLK_6M from CLK_48M phase
                    locked to CLK_1M via CLK_1M rising edge detection.
                    Both CLK_16M and CLK_48M connected in 16MHz build.
@@ -325,9 +327,12 @@ module VideoULA (
 `endif
         if (mhz16_clken) begin
             if (~sram_write) begin
-                RR <= (red_val   & crtc_disen) ^ cursor_invert[0];
-                GG <= (green_val & crtc_disen) ^ cursor_invert[0];
-                BB <= (blue_val  & crtc_disen) ^ cursor_invert[0];
+                // Modes 0-6: cursor_invert0 has no delay, so the cursor lines up
+                // with the palette lookup latency. Do not use cursor_invert0 in
+                // the teletext mux below as well: routing both fails to fit.
+                RR <= (red_val   & crtc_disen) ^ cursor_invert0;
+                GG <= (green_val & crtc_disen) ^ cursor_invert0;
+                BB <= (blue_val  & crtc_disen) ^ cursor_invert0;
             end
         end
     end
@@ -335,8 +340,13 @@ module VideoULA (
     // =========================================================================
     // OUTPUT MUX
     // =========================================================================
-    assign R = r0_teletext ? (R_IN ^ cursor_invert[3]) : RR;
-    assign G = r0_teletext ? (G_IN ^ cursor_invert[3]) : GG;
-    assign B = r0_teletext ? (B_IN ^ cursor_invert[3]) : BB;
+    // Mode 7: cursor_invert[1] is correct on a Master in all clock
+    // configurations, and on a Model B when the CPLD generates the 6MHz.
+    // On a Model B that derives 6MHz from the CPLD 8/4/2MHz outputs the
+    // mode 7 cursor may be one pixel too far right; feed the CPLD CLK_6M
+    // directly to the teletext IC to avoid this.
+    assign R = r0_teletext ? (R_IN ^ cursor_invert[1]) : RR;
+    assign G = r0_teletext ? (G_IN ^ cursor_invert[1]) : GG;
+    assign B = r0_teletext ? (B_IN ^ cursor_invert[1]) : BB;
 
 endmodule

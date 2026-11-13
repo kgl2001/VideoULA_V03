@@ -1,188 +1,116 @@
-# VideoULA V03 — BBC Micro Video ULA Replacement
-## 44-pin Atmel ATF1504AS CPLD Version
+# VideoULA V03 – CPLD firmware
 
-This repository contains the hardware design and firmware for the VideoULA V03, a drop-in replacement for the VC2069 Video ULA (IC6) in the Acorn BBC Micro Model B and Master 128.
+Firmware for the ATF1504AS-AU44 (V03 hardware). Current release: **V02/V03 Build 4**.
 
----
+Note: firmware build numbers are independent of hardware versions and revisions. The
+V01 firmware (Build 37) and the V02/V03 firmware (Build 4) use separate numbering.
 
-## Project Overview
+## Files
 
-The original BBC Micro Video ULA (IC6) is a custom ASIC that is no longer manufactured. Failed or missing ULAs result in a non-functional machine. This project provides a modern replacement using a CPLD and a small external SRAM for palette storage.
-
-There are three hardware versions of this replacement, each in a separate repository:
-
-| Version | CPLD | Macrocells | Tool | Repository |
-|---|---|---|---|---|
-| V01 | Xilinx XC9572XL-10-VQ44 | 72 | ISE 14.7 | [VideoULA_V01](https://github.com/kgl2001/VideoULA_V01) |
-| V02 | Xilinx XC9572XL-10-VQ64 | 72 | ISE 14.7 | [VideoULA_V02](https://github.com/kgl2001/VideoULA_V02) |
-| **V03** | Atmel ATF1504AS-10AU44 | 64 | Quartus 13.0 SP1 | This repo |
-
-All three versions share the same 28-pin DIP footprint as the original ULA and are pin-compatible with the BBC Micro motherboard.
-
----
-
-## V03 Hardware
-
-- **CPLD**: Atmel ATF1504AS-10AU44 (64 macrocells, 5V) — still in production
-- **SRAM**: ISSI IS62C256AL-45TLI (32K×8, 5V, TSOP-28, 45ns) — only locations 0-15 and bits 0-3 used
-- **Oscillator**: 48MHz SMD oscillator (3225 package, 5V) — optional in 16MHz mode
-- **Clock buffer**: 74LVC1G17 (SOT-23) — Schmitt trigger buffer on 16MHz CLK_IN
-- **No LDO required** — everything runs at 5V
-
-### Key differences from V01/V02
-
-- **5V CPLD** — ATF1504AS operates at 5V throughout, no LDO required
-- **Higher output voltage** — 5V logic outputs directly compatible with Master 128 custom ICs requiring higher logic 1 voltage; no output clock buffering needed
-- **Still in production** — ATF1504AS is actively manufactured by Microchip, unlike the obsolete XC9572XL
-- **64 macrocells** — slightly fewer than the XC9572XL's 72, but sufficient for the design (52/64 used in 48MHz build)
-- **Quartus 13.0 SP1** — uses Altera/Intel Quartus instead of Xilinx ISE
-- **Separate CLK_16M and CLK_48M GCK pins** — no solder bridge needed to switch modes
-
-### Hardware Revisions
-
-| Revision | Status | Changes |
-|---|---|---|
-| Rev01 | PCB designed, not yet built or tested | Initial release |
-
----
-
-## Firmware
-
-The firmware is written in Verilog and built using Altera Quartus 13.0 SP1. The same Verilog source file (`src/VideoULA.v`) is shared between V02 and V03.
-
-The Quartus project targets the `EPM7064STC44-10` device — the Altera MAX7000S equivalent of the ATF1504AS, which Quartus supports natively. The `.pof` output is converted to a `.jed` file using the `pof2jed` utility for programming the ATF1504AS.
-
-### Operating Modes
-
-Two firmware builds are required — one per operating mode. Both CLK_16M and CLK_48M are wired to dedicated GCK pins, so no hardware changes are needed to switch modes — simply reprogram the CPLD with the appropriate `.jed` file.
-
-#### 48MHz Mode (recommended)
-- Uses the onboard 48MHz oscillator as the master clock
-- Generates all BBC clock outputs (8/4/2/1MHz, CRTC, 6MHz) internally
-- Provides clean, phase-locked 6MHz output for the SAA5050 teletext chip (tD ≈ 20ns ✓)
-- Works reliably on all machines from cold power-up
-- Build: uncomment `` `define CLK_48MHZ `` in `VideoULA.v`
-
-#### 16MHz Mode
-- Uses the BBC motherboard's 16MHz clock as the master clock (via Schmitt trigger buffer)
-- The 48MHz oscillator is optional in 16MHz mode:
-  - **Not fitted**: BBC's existing 6MHz circuit drives the SAA5050 as normal
-  - **Fitted**: CPLD generates clean phase-locked 6MHz output (connect via IC37 replacement board)
-- Build: uncomment `` `define CLK_16MHZ `` in `VideoULA.v`
-
-### Quartus Build Instructions
-
-1. Open Altera Quartus 13.0 SP1
-2. Open `VideoULA.qpf`
-3. Select the operating mode by uncommenting the appropriate `define` in `src/VideoULA.v`
-4. Run `Start Compilation` (Ctrl+L)
-5. Convert the output `.pof` file to `.jed` using `pof2jed`
-6. Program the ATF1504AS using the V03 programmer board (see below)
-
-### Programming the ATF1504AS
-
-Unlike V01 and V02, the V03 board does not have an onboard JTAG connector. This is because the ATF1504AS shares its JTAG pins with I/O pins used by the BBC Micro bus interface — they cannot be used for JTAG programming while the board is installed in the computer.
-
-To program the V03 board, a dedicated programmer board is required. This programmer:
-
-- Accepts the V03 VideoULA board as a plug-in module
-- Is powered from the BBC Micro auxiliary power socket (Molex +5V/+12V connector)
-- Has a switch to select between normal I/O mode and JTAG programming mode
-- Has a standard JTAG header for connection to a compatible JTAG programmer (e.g. running ATMISP)
-
-The KiCAD design files for the programmer board and FreeCAD design files for a suitable enclosure are included in this repository.
-
-**Programming procedure:**
-1. Remove the V03 board from the BBC Micro
-2. Insert the V03 board into the programmer
-3. Connect the programmer to the BBC Micro auxiliary power socket
-4. Connect a JTAG programmer to the JTAG header on the programmer board
-5. Set the switch to JTAG programming mode
-6. Program the `.jed` file using ATMISP or compatible software
-7. Set the switch back to I/O mode
-8. Remove the V03 board from the programmer and reinstall in the BBC Micro
-
-### Quartus Warning Suppression
-
-The following warnings are suppressed in the `.qsf` and are expected/harmless:
-
-| Message | Reason |
+| File | Purpose |
 |---|---|
-| 15705 | Unused clock port pin assignment (expected when only one clock mode is built) |
-| 20028 | Parallel compilation not licensed — informational only |
-| 199027 | Output file format — `.pof` is generated correctly |
-| 332174, 332049 | Timing analysis informational messages |
-| 335095 | TimeQuest latch analysis — no latches in design |
+| `src/VideoULA.v` | Verilog source (common V02/V03 code) |
+| `VideoULA.qsf` | Quartus settings and pin assignments |
+| `VideoULA.qpf` | Quartus project file |
+| `VideoULA.sdc` | Timing constraints (auto-detected from the project root) |
 
----
+Keep this layout. The `.qsf` refers to `src/VideoULA.v` by relative path.
 
-## SRAM Wiring
+## Toolchain
 
-The external SRAM stores the 16-entry colour palette (4 bits per entry):
+The tools and commands below are for a **Windows** build environment.
 
-| SRAM Pin | Connection |
-|---|---|
-| A0-A3 | CPLD SRAM_ADDR[0:3] |
-| A4-A14 | GND (tie low) |
-| D0-D3 | CPLD SRAM_DATA[0:3] (bidirectional) |
-| D4-D7 | Leave unconnected |
-| /WE | CPLD SRAM_nWE |
-| /OE | GND (always output enabled) |
-| /CS | GND (always selected) |
+- Altera Quartus II 13.0 SP1 Web Edition:
+  https://www.altera.com/downloads/fpga-development-tools/quartus-ii-web-edition-design-software-version-13-0sp1-windows
+- Atmel POF2JED: https://www.microchip.com/en-us/development-tool/pof2jed
+- fuseconv (part of prjbureau): https://github.com/whitequark/prjbureau
+- OpenOCD (xPack): https://github.com/xpack-dev-tools/openocd-xpack/releases
+- Device: EPM7064STC44-10 (used as the closest match for the ATF1504AS; the
+  output is converted for the ATF1504AS in step 2 below)
 
----
+## Choosing the 16MHz or 48MHz build
 
-## 6MHz Clock for Mode 7 (Teletext)
+Near the top of `src/VideoULA.v`, enable exactly one of:
 
-- **48MHz mode**: CLK_6M pin provides clean phase-locked 6MHz (tD ≈ 20ns ✓). Connect to SAA5050 via IC37 replacement board.
-- **16MHz mode, oscillator fitted**: CLK_6M provides clean phase-locked 6MHz, self-correcting every 1µs. Connect via IC37 replacement board.
-- **16MHz mode, oscillator not fitted**: CLK_6M output ignored. BBC motherboard's existing 6MHz circuit used as normal.
+    `define CLK_48MHZ
+    //`define CLK_16MHZ
 
----
+For the 16MHz build, swap the comment markers so `CLK_16MHZ` is active and
+`CLK_48MHZ` is commented out. Do not enable both.
 
-## PCB Design Notes
+The 48MHz oscillator is optional in the 16MHz build. If it is not fitted,
+do not connect `CLK_6M` to the teletext IC.
 
-The PCB has been designed using KiCAD V10 as a 2-layer board. It can easily be changed to a 4-layer board with GND/Power planes on the inner layers if signal integrity is a concern.
+## Programming the ATF1504AS
 
-### JLCPCB Fabrication
+In the commands below, `<project>` is your Quartus project folder.
 
-The board design includes a 5×5mm silkscreen box on the underside of the PCB. This is used by JLCPCB to position a QR code serial number. When ordering from JLCPCB:
+### Step 1 – Create the .pof file in Quartus
 
-- Select **Specify position** in the QR code / 2D barcode options during the ordering process
-- If this option is not selected, JLCPCB will print the 5×5mm silkscreen box as-is and attempt to place the QR code at a different location of their choosing
+1. Install Quartus II 13.0 SP1 (link above) and open the project.
+2. The project uses the four files from the Files section above: `src\VideoULA.v`,
+   `VideoULA.qpf`, `VideoULA.qsf` and `VideoULA.sdc`. Open `VideoULA.qpf` in Quartus.
+3. Compile and check for errors.
 
-If not using JLCPCB, the chosen fabricator will likely print the 5×5mm box as a plain white square on the PCB. To avoid this, remove the silkscreen box from the PCB design and regenerate the Gerber files before submitting.
+This creates `<project>\output_files\VideoULA.pof`.
 
-### Assembly
+### Step 2 – Convert .pof to .jed with Atmel POF2JED
 
-A combined CPL (Component Placement List) and BOM (Bill of Materials) Excel file is included in the Gerbers folder. This can be used directly with the JLCPCB PCBA (PCB Assembly) service.
+1. Download and install Atmel POF2JED (link above).
+2. Input file: `<project>\output_files\VideoULA.pof`
+3. Device: `1504AS`
+4. Output file: `<project>\output_files\VideoULA.jed`
 
-Note that the JLCPCB Economy PCBA process only assembles components on one side of the PCB. Select the **top side** for assembly — this leaves only the SRAM and its associated decoupling capacitor to be hand soldered to the underside of the board.
+### Step 3 – Convert .jed to .svf with fuseconv
 
----
+1. Install Python 3 and make sure it is on your PATH.
+2. Download the prjbureau tools (link above) and extract them (for example to
+   `C:\prjbureau-main`).
+3. Run:
 
-## Known Limitations
+        cd C:\prjbureau-main
+        python -m util.fuseconv -d ATF1504AS <project>\output_files\VideoULA.jed <project>\output_files\VideoULA.svf
 
-- **SCART/HDMI adapter compatibility**: Some SCART→HDMI display adapters may show minor pixel artefacts with non-standard screen modes. RGBtoHDMI and direct CRT connections are not affected.
+This will likely fail with an error ending similar to:
 
----
+    util.jesd3.JESD3ParsingError: unrecognized field at line 795, column 2 (b'*\n\nNOTE  device '...)
 
-## Compatibility
+The POF2JED output has a stray line containing only `*`. Open the `.jed` file
+in a text editor, go to the line reported, and either delete the line that
+contains only `*` or put `NOTE` in front of the `*`. Save the file and run the
+command again.
 
-Designed for BBC Micro Model B and Master 128. The 5V CPLD outputs are directly compatible with the higher logic 1 voltage required by some Master 128 custom ICs.
+### Step 4 – Program the CPLD with OpenOCD
 
----
+1. Download OpenOCD for Windows (link above) and extract it
+   (for example to `C:\OpenOCD`).
+2. Run:
 
-## Credits
+        cd <project>\output_files
+        C:\OpenOCD\bin\openocd -d2 -f interface/altera-usb-blaster.cfg -c "adapter speed 400" -c "transport select jtag" -c "jtag newtap ATF1504AS tap -irlen 3 -expected-id 0x0150403f" -c "init" -c "svf VideoULA.svf" -c "sleep 200" -c "shutdown"
 
-- **Ken Lowe** — PCB design, Verilog development and testing
-- **hoglet (Stardot forums)** — Clock architecture analysis, DRAM timing analysis, community testing
-- **Stardot community** — Testing, feedback and suggestions
+A successful run ends with a message similar to
+`svf file programmed successfully for NNNN commands with 0 errors`.
 
----
+The CPLD needs the 12V programming voltage on its programming pin during
+programming. See the programmer board section in the main README.
 
-## Licence
+## Status
 
-Hardware: [Creative Commons BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+V02/V03 Build 4 is tested on V03 hardware in both 16MHz and 48MHz modes.
+See the main README for the testing status table and known limitations.
 
-Firmware: [MIT Licence](https://opensource.org/licenses/MIT)
+### Cursor position
+
+Build 4 fixes the cursor position: in modes 0-6 the cursor is no longer one pixel
+too far right. Modes 0-6 use no cursor delay; mode 7 uses a one-stage delay
+(`cursor_invert[1]`). Both paths cannot use zero delay together, because the
+design then fails to route in Quartus.
+
+Tested with the cursor on a Master and a Model B, in the 48MHz and 16MHz builds, with the
+6MHz generated by the CPLD (48MHz oscillator fitted) and with the 6MHz derived on the
+motherboard.
+
+Known limitation: on a Model B that derives its own 6MHz from the CPLD 8/4/2MHz
+outputs, the mode 7 cursor may be one pixel too far right. To avoid this, feed the
+CPLD `CLK_6M` output directly to the teletext IC (this needs the 48MHz oscillator).
