@@ -11,10 +11,17 @@ create_clock -name CLK_16M -period 62.5 [get_ports CLK_16M]
 # All other inputs are only sampled on mhz16_clken (every 62.5ns minimum -
 # one 16MHz cycle). Strict 48MHz timing analysis is not meaningful for these
 # signals, so use false paths to avoid spurious timing violations.
-set_false_path -from [get_ports {nCS A D[*] DISEN CURSOR R_IN G_IN B_IN SRAM_DATA[*]}]
+set_false_path -from [get_ports {nCS A D[*] DISEN CURSOR R_IN G_IN B_IN SRAM_DATA[*] CLK_SEL}]
 
 # Output clocks: direct bit taps from clk_counter
 set_false_path -to [get_ports {CLK_8M CLK_4M CLK_2M CLK_1M CLK_CRTC CLK_6M}]
 
 # Other outputs: only update on mhz16_clken, so false paths are appropriate
 set_false_path -to [get_ports {R G B SRAM_ADDR[*] SRAM_nWE SRAM_DATA[*]}]
+
+# The two clocks are never active together (selected by the static CLK_SEL pin)
+set_clock_groups -exclusive -group {CLK_48M} -group {CLK_16M}
+
+# These registers only update on mhz16_clken (every 3rd CLK_48M tick in 48MHz mode)
+set_multicycle_path -setup -end 3 -from [get_clocks CLK_48M] -to [get_registers {cursor_active RR GG BB}]
+set_multicycle_path -hold  -end 2 -from [get_clocks CLK_48M] -to [get_registers {cursor_active RR GG BB}]

@@ -2,6 +2,12 @@
 /************************************************************************
 VideoULA.v
 VideoULA V02/V03 - A replacement Video ULA for the BBC Micro
+Build 7 - November 2026 - Unified build. One firmware now supports both
+                   the 48MHz and 16MHz modes; the mode is selected by the
+                   CLK_SEL input (pin 39, JP1). Pin 39 has a 10K pull-up, so
+                   with JP1 open the CPLD runs in 48MHz mode. Bridging JP1 to
+                   GND selects 16MHz mode. The state of pin 39 is read at all
+                   times, so power-cycle after changing JP1.
 Build 6 - November 2026 - SRAM palette write fix. The write is split into a
                    prepare cycle (address driven, nWE high) and a write cycle
                    (nWE low, data driven), so the address is stable before nWE
@@ -29,18 +35,17 @@ Build 3 - August 2026 - 16MHz build: CLK_6M from CLK_48M phase
 Community contributions: hoglet (Stardot forums) - unified clock architecture
 
 ------------------------------------------------------------------------
-CLOCK CONFIGURATION - uncomment ONE define only
+CLOCK SELECTION - CLK_SEL (pin 39, JP1)
 ------------------------------------------------------------------------
-`define CLK_48MHZ
+JP1 open (CLK_SEL = 1, pulled up): 48MHz mode (recommended).
   48MHz oscillator on CLK_48M pin (GCK).
   Generates CLK_6M for SAA5050 teletext chip.
-  CLK_16M pin unused.
 
-`define CLK_16MHZ
+JP1 bridged to GND (CLK_SEL = 0): 16MHz mode.
   16MHz from BBC motherboard on CLK_16M pin (GCK) via Schmitt trigger.
   CLK_6M is generated from CLK_16M (6 edges per 8 clocks, using both clock
-  edges). CLK_48M is not used. If CLK_6M is not connected to the teletext
-  IC, the machine's own 6MHz is used.
+  edges). If CLK_6M is not connected to the teletext IC, the machine's own
+  6MHz is used.
 ------------------------------------------------------------------------
 
 Clock architecture (unified clk_counter in both modes):
@@ -80,18 +85,6 @@ Target devices:
 ************************************************************************/
 
 // ------------------------------------------------------------------------
-// CLOCK CONFIGURATION - uncomment ONE define only
-// ------------------------------------------------------------------------
-`define CLK_48MHZ
-//`define CLK_16MHZ
-
-`ifdef CLK_48MHZ
-  `ifdef CLK_16MHZ
-    ERROR_BOTH_CLOCK_DEFINES_SET
-  `endif
-`endif
-
-// ------------------------------------------------------------------------
 // SRAM PALETTE WRITE TIMING - select at build time
 // ------------------------------------------------------------------------
 // A palette write takes three cycles of the 8-cycle clk_counter: capture the
@@ -113,11 +106,9 @@ Target devices:
 //`define SRAM_WRITE_LATE
 
 module VideoULA (
-    input  wire        CLK_48M,     // 48MHz oscillator (GCK pin in 48MHz mode;
-                                   // unused in 16MHz mode)
-`ifdef CLK_16MHZ
+    input  wire        CLK_48M,     // 48MHz oscillator (GCK pin)
     input  wire        CLK_16M,     // 16MHz from BBC via Schmitt trigger (GCK pin)
-`endif
+    input  wire        CLK_SEL,     // pin 39: 1 = 48MHz mode, 0 = 16MHz mode
     output wire        CLK_8M,
     output wire        CLK_4M,
     output wire        CLK_2M,
@@ -162,23 +153,24 @@ module VideoULA (
     // =========================================================================
     reg [3:0] clk_counter = 4'b0000;
     wire mhz16_clken;
+    wire sel48 = CLK_SEL;
+    wire clk_main = sel48 ? CLK_48M : CLK_16M;
 
-`ifdef CLK_48MHZ
-    // 2-bit prescaler: divides CLK_48M by 3 → mhz16_clken every 3rd tick
+    // ---- 48MHz mode: prescaler and 6MHz state decode (CLK_48M) ----
     reg [1:0] clk_prescaler = 2'b00;
     reg       clk_6m_reg    = 1'b0;
 
-    always @(posedge CLK_48M) begin
+    // Prescaler and 6MHz decode run on clk_main (= CLK_48M in 48MHz mode) so they share
+    // the same clock path as clk_counter. In 16MHz mode they free-run and are unused.
+    always @(posedge clk_main) begin
         if (clk_prescaler[1])
             clk_prescaler <= 2'b00;
         else
             clk_prescaler <= clk_prescaler + 1'b1;
     end
 
-    // CLK_6M: phase locked via {clk_counter, clk_prescaler} state decode
-    // tD = 20.83ns before CLK_1M falls ✓ (SAA5050 requires 6-60ns)
     wire [5:0] clk6m_state = {clk_counter, clk_prescaler};
-    always @(posedge CLK_48M)
+    always @(posedge clk_main)
         if (clk6m_state == 6'b000010 || clk6m_state == 6'b001101 || clk6m_state == 6'b011000 ||
             clk6m_state == 6'b100010 || clk6m_state == 6'b101101 || clk6m_state == 6'b111000)
             clk_6m_reg <= 1'b0;
@@ -186,45 +178,29 @@ module VideoULA (
                  clk6m_state == 6'b101000 || clk6m_state == 6'b110010 || clk6m_state == 6'b111101)
             clk_6m_reg <= 1'b1;
 
-    assign mhz16_clken = clk_prescaler[1];
-    assign CLK_6M      = clk_6m_reg;
+    assign mhz16_clken = ~sel48 | clk_prescaler[1];
 
-    always @(posedge CLK_48M)
+    always @(posedge clk_main)
         if (mhz16_clken)
             clk_counter <= clk_counter + 1'b1;
 
-`else // CLK_16MHZ
-    // 16MHz mode: mhz16_clken always active
-    // CLK_16M drives clk_counter directly. CLK_48M is not used.
-    assign mhz16_clken = 1'b1;
-
-    always @(posedge CLK_16M)
-        clk_counter <= clk_counter + 1'b1;
-
-    // CLK_6M from CLK_16M: 6 edges per 8 clocks (3,3,2,3,3,2 half-cycles).
-    // cnt_pos and clk_counter both start at 0 and count together, so the
-    // phase relative to CLK_1M is fixed. tD (6MHz rise to 1MHz fall) is
-    // about 31ns; SAA5050 requires 6-60ns.
+    // ---- 16MHz mode: 6MHz from CLK_16M (rising toggle XOR falling toggle) ----
     reg [2:0] cnt_pos = 3'd0;
     reg       tgl_pos = 1'b1;
     reg       tgl_neg = 1'b0;
 
-    // Rising-edge domain
     always @(posedge CLK_16M) begin
         cnt_pos <= cnt_pos + 3'd1;
         if (cnt_pos == 3'd0 || cnt_pos == 3'd1 || cnt_pos == 3'd4 || cnt_pos == 3'd5)
             tgl_pos <= ~tgl_pos;
     end
 
-    // Falling-edge domain (samples cnt_pos so phase alignment is guaranteed)
     always @(negedge CLK_16M) begin
         if (cnt_pos == 3'd3 || cnt_pos == 3'd7)
             tgl_neg <= ~tgl_neg;
     end
 
-    assign CLK_6M = tgl_pos ^ tgl_neg;
-
-`endif
+    assign CLK_6M = sel48 ? clk_6m_reg : (tgl_pos ^ tgl_neg);
 
     assign CLK_8M   = clk_counter[0];
     assign CLK_4M   = clk_counter[1];
@@ -258,11 +234,7 @@ module VideoULA (
     // =========================================================================
     // REGISTER WRITES
     // =========================================================================
-`ifdef CLK_48MHZ
-    always @(posedge CLK_48M) begin
-`else
-    always @(posedge CLK_16M) begin
-`endif
+    always @(posedge clk_main) begin
         if (mhz16_clken) begin
             if (r0_prepare_write & ~A) begin
                 r0_cursor0    <= D[7];
@@ -289,11 +261,7 @@ module VideoULA (
     wire sram_busy      = sram_pre_write | sram_do_write;
 
     reg [3:0] sram_addr_reg = 4'b0000;
-`ifdef CLK_48MHZ
-    always @(posedge CLK_48M)
-`else
-    always @(posedge CLK_16M)
-`endif
+    always @(posedge clk_main)
         if (mhz16_clken & r0_data_ready)
             sram_addr_reg <= D[7:4];
 
@@ -304,11 +272,7 @@ module VideoULA (
     // Data-bus enable is registered: set in the prepare cycle, so it is high
     // for the nWE cycle only (a combinational enable fitted badly in 16MHz mode).
     reg sram_oe_reg = 1'b0;
-`ifdef CLK_48MHZ
-    always @(posedge CLK_48M)
-`else
-    always @(posedge CLK_16M)
-`endif
+    always @(posedge clk_main)
         if (mhz16_clken) sram_oe_reg <= sram_pre_write;
     assign SRAM_DATA = sram_oe_reg ? D[3:0] : 4'bZZZZ;
 
@@ -317,11 +281,7 @@ module VideoULA (
     // =========================================================================
     // PIXEL SHIFT REGISTER
     // =========================================================================
-`ifdef CLK_48MHZ
-    always @(posedge CLK_48M) begin
-`else
-    always @(posedge CLK_16M) begin
-`endif
+    always @(posedge clk_main) begin
         if (mhz16_clken) begin
             if (pixel_clken) begin
                 if (crtc_clken) begin
@@ -346,11 +306,7 @@ module VideoULA (
                            (r0_cursor1 &  cursor_counter[0] & ~cursor_counter[1]) |
                            (r0_cursor2 &  cursor_counter[1]));
 
-`ifdef CLK_48MHZ
-    always @(posedge CLK_48M) begin
-`else
-    always @(posedge CLK_16M) begin
-`endif
+    always @(posedge clk_main) begin
         if (mhz16_clken) begin
             cursor_invert[0] <= cursor_invert0;
             cursor_invert[1] <= cursor_invert[0];
@@ -378,11 +334,7 @@ module VideoULA (
     reg GG = 1'b0;
     reg BB = 1'b0;
 
-`ifdef CLK_48MHZ
-    always @(posedge CLK_48M) begin
-`else
-    always @(posedge CLK_16M) begin
-`endif
+    always @(posedge clk_main) begin
         if (mhz16_clken) begin
             if (~sram_busy) begin
                 // Modes 0-6: cursor_invert0 has no delay, so the cursor lines up

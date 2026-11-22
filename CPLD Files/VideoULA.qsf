@@ -96,3 +96,4 @@ set_location_assignment PIN_44 -to CLK_6M
 set_location_assignment PIN_37 -to CLK_16M
 set_location_assignment PIN_40 -to CLK_48M
 set_global_assignment -name VERILOG_FILE src/VideoULA.v
+set_location_assignment PIN_39 -to CLK_SEL
