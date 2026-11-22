@@ -42,7 +42,7 @@ No reprogramming is needed to change mode. Power-cycle the machine after changin
 In both modes the CPLD `CLK_6M` output can be used with the 6MHz interface boards (see the main
 README). In the 16MHz mode `CLK_6M` is generated from the 16MHz clock and has a small fixed
 jitter (about 10ns), so the picture on mode 7 test screens such as M7CALIB is slightly noisier
-than in the 48MHz mode, and RGBtoHDMI may occasionally need recalibrating after power-up. If
+than in the 48MHz mode, and RGBtoHDMI may require a few calibration attempts before you get a stable calibration that survives power cycles. If
 `CLK_6M` is not connected, the motherboard's own 6MHz is used.
 
 ## SRAM write timing
