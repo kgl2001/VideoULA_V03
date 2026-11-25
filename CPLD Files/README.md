@@ -40,10 +40,11 @@ the V03 board), which has a 10K pull-up:
 No reprogramming is needed to change mode. Power-cycle the machine after changing JP1.
 
 In both modes the CPLD `CLK_6M` output can be used with the 6MHz interface boards (see the main
-README). In the 16MHz mode `CLK_6M` is generated from the 16MHz clock and has a small fixed
-jitter (about 10ns), so the picture on mode 7 test screens such as M7CALIB is slightly noisier
-than in the 48MHz mode, and RGBtoHDMI may require a few calibration attempts before you get a stable calibration that survives power cycles. If
-`CLK_6M` is not connected, the motherboard's own 6MHz is used.
+README). In the 16MHz mode `CLK_6M` is generated from the 16MHz clock. It is phase-locked to the
+1MHz clock and holds its phase across power cycles, so RGBtoHDMI does not need recalibrating after
+power-up. It has a small fixed jitter (about 10ns), so the picture on mode 7 test screens such as
+M7CALIB is slightly noisier than in the 48MHz mode. If `CLK_6M` is not connected, the motherboard's
+own 6MHz is used.
 
 ## SRAM write timing
 
@@ -117,12 +118,15 @@ programming. See the programmer board section in the main README.
 ## Status
 
 V02/V03 Build 7 is tested on V03 hardware in both 16MHz and 48MHz modes, on a Model B and a
-Master 128. The macrocell count is 61/64.
+Master 128. The macrocell count is 59/64.
 
 ### Build 7
 
 The 16MHz and 48MHz builds are combined. The mode is selected by pin 39 (JP1), so the CPLD does not
 need to be reprogrammed to change mode.
+
+In the 16MHz mode, the `CLK_6M` edge terms are now derived directly from the main clock counter
+instead of a separate counter, so the 6MHz phase against the 1MHz is the same after every power-up.
 
 ### Build 6
 
