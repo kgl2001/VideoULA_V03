@@ -34,7 +34,7 @@ All three versions share the same 28-pin DIP footprint as the original ULA and a
 - **5V CPLD** — ATF1504AS operates at 5V throughout, no LDO required
 - **Higher output voltage** — 5V logic outputs directly compatible with Master 128 custom ICs requiring higher logic 1 voltage; no output clock buffering needed
 - **Still in production** — ATF1504AS is actively manufactured by Microchip, unlike the obsolete XC9572XL
-- **64 macrocells** — slightly fewer than the XC9572XL's 72, but sufficient for the design (61/64 used)
+- **64 macrocells** — slightly fewer than the XC9572XL's 72, but sufficient for the design (59/64 used)
 - **Quartus 13.0 SP1** — uses Altera/Intel Quartus instead of Xilinx ISE
 - **Separate CLK_16M and CLK_48M GCK pins** — the mode is selected by solder bridge JP1 (pin 39), with no reprogramming needed
 
@@ -161,7 +161,7 @@ Note that the JLCPCB Economy PCBA process only assembles components on one side 
 ## Known Limitations
 
 - **Mode 7 cursor and the 6MHz source**: with the motherboard's own 6MHz circuit, the mode 7 cursor on a Master is half a pixel to the left, and the Mode 7 picture can show some noise on test screens such as M7CALIB. Using the CPLD's CLK_6M in 48MHz mode, with the IC37 / IC25 replacement board, avoids both (see the 6MHz Clock section).
-- **16MHz mode**: with the CPLD's CLK_6M, the mode 7 cursor on a Model B is half a pixel to the left, M7CALIB shows slightly more noise than in 48MHz mode, and RGBtoHDMI may require a few calibration attempts before you get a stable calibration that survives power cycles. See the [cursor tables](CPLD%20Files/README.md#cursor-position).
+- **16MHz mode**: with the CPLD's CLK_6M, the mode 7 cursor on a Model B is half a pixel to the left, and M7CALIB shows slightly more noise than in 48MHz mode. The 6MHz is phase-locked to the 1MHz, so RGBtoHDMI does not need recalibrating after power-up. See the [cursor tables](CPLD%20Files/README.md#cursor-position).
 
 ---
 
