@@ -8,6 +8,10 @@ Build 7 - November 2026 - Unified build. One firmware now supports both
                    with JP1 open the CPLD runs in 48MHz mode. Bridging JP1 to
                    GND selects 16MHz mode. The state of pin 39 is read at all
                    times, so power-cycle after changing JP1.
+                   In 16MHz mode the CLK_6M edge terms are now derived directly
+                   from clk_counter[2:0] instead of a separate 3-bit counter. The
+                   separate counter could end up out of step with clk_counter, so
+                   the 6MHz phase against the 1MHz varied between power-ups.
 Build 6 - November 2026 - SRAM palette write fix. The write is split into a
                    prepare cycle (address driven, nWE high) and a write cycle
                    (nWE low, data driven), so the address is stable before nWE
@@ -184,21 +188,19 @@ module VideoULA (
         if (mhz16_clken)
             clk_counter <= clk_counter + 1'b1;
 
-    // ---- 16MHz mode: 6MHz from CLK_16M (rising toggle XOR falling toggle) ----
-    reg [2:0] cnt_pos = 3'd0;
-    reg       tgl_pos = 1'b1;
-    reg       tgl_neg = 1'b0;
+    // ---- 16MHz mode: 6MHz from CLK_16M (rising term XOR falling term) ----
+    // tgl_pos and tgl_neg are pure functions of clk_counter[2:0] (the same count
+    // that gives CLK_1M), not toggle flops with a separate counter, so the 6MHz
+    // cannot lose its phase against the 1MHz. Output is identical to the earlier
+    // toggle version: 6 edges per 8 clocks (3,3,2,3,3,2 half-cycles).
+    reg tgl_pos = 1'b1;
+    reg tgl_neg = 1'b0;
 
-    always @(posedge CLK_16M) begin
-        cnt_pos <= cnt_pos + 3'd1;
-        if (cnt_pos == 3'd0 || cnt_pos == 3'd1 || cnt_pos == 3'd4 || cnt_pos == 3'd5)
-            tgl_pos <= ~tgl_pos;
-    end
+    always @(posedge CLK_16M)
+        tgl_pos <= ~(clk_counter[2:0] == 3'd0 || clk_counter[2:0] == 3'd4);
 
-    always @(negedge CLK_16M) begin
-        if (cnt_pos == 3'd3 || cnt_pos == 3'd7)
-            tgl_neg <= ~tgl_neg;
-    end
+    always @(negedge CLK_16M)
+        tgl_neg <= (clk_counter[2:0] >= 3'd3 && clk_counter[2:0] <= 3'd6);
 
     assign CLK_6M = sel48 ? clk_6m_reg : (tgl_pos ^ tgl_neg);
 
